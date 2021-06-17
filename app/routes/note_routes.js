@@ -59,16 +59,7 @@ module.exports = function (app, db) {
                 db.collection('Fotos').find({ fotoid: v_base64 }).toArray(function (err, result) {
                     if (err) throw err;
                     if (result.length == 0) {
-
-                        var ipAddr = req.headers["x-forwarded-for"];
-                        if (ipAddr){
-                          var list = ipAddr.split(",");
-                          ipAddr = list[list.length-1];
-                        } else {
-                          ipAddr = req.connection.remoteAddress;
-                        }
-
-                        db.collection('Fotos').insertOne({ fotoid: v_base64, formato: "data:" + req.files.file.mimetype + ";base64,", dateAdded: new Date(), votes: 0, ip: ipAddr }, function (err, obj) {
+                        db.collection('Fotos').insertOne({ fotoid: v_base64, formato: "data:" + req.files.file.mimetype + ";base64,", dateAdded: new Date(), votes: 0, ip: [] }, function (err, obj) {
                             if (err) throw err;
                             console.log(obj.insertedId)
                             res.send({ 'srcImage': srcImage, '_id': obj.insertedId });
@@ -116,12 +107,20 @@ module.exports = function (app, db) {
     });
 
     app.post("/vote", async (req, res) => {
+        var ipAddr = req.headers["x-forwarded-for"];
+        if (ipAddr){
+          var list = ipAddr.split(",");
+          ipAddr = list[list.length-1];
+        } else {
+          ipAddr = req.connection.remoteAddress;
+        }
+
         var ObjectId = require('mongodb').ObjectId;
         var o_id = new ObjectId(req.body.id);
         if (Object.keys(req.body).length == 2 && (req.body.vote == 0 || req.body.vote == 1)) {
             if (req.body.vote == 0)
                 req.body.vote = -1;
-            db.collection('Fotos').updateOne({ _id: o_id }, { $inc: { votes: req.body.vote } }, function (err, obj) {
+            db.collection('Fotos').updateOne({ _id: o_id }, { $inc: { votes: req.body.vote } , $push: { ip: ipAddr } }, function (err, obj) {
                 if (err) throw err;
                 res.send({ 'vote': 'ok' })
             });
