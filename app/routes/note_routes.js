@@ -11,6 +11,8 @@ module.exports = function (app, db) {
             if (err) throw err;
             console.log(result)
         });*/
+       
+
         const projection = { _id: 1, dateAdded: 1, votes:1};
         db.collection('Fotos').find().sort({ votes: -1 }).project(projection).toArray(function (err, result) {
             res.send(result);
@@ -57,7 +59,16 @@ module.exports = function (app, db) {
                 db.collection('Fotos').find({ fotoid: v_base64 }).toArray(function (err, result) {
                     if (err) throw err;
                     if (result.length == 0) {
-                        db.collection('Fotos').insertOne({ fotoid: v_base64, formato: "data:" + req.files.file.mimetype + ";base64,", dateAdded: new Date(), votes: 0, ip: req.connection.remoteAddress }, function (err, obj) {
+
+                        var ipAddr = req.headers["x-forwarded-for"];
+                        if (ipAddr){
+                          var list = ipAddr.split(",");
+                          ipAddr = list[list.length-1];
+                        } else {
+                          ipAddr = req.connection.remoteAddress;
+                        }
+
+                        db.collection('Fotos').insertOne({ fotoid: v_base64, formato: "data:" + req.files.file.mimetype + ";base64,", dateAdded: new Date(), votes: 0, ip: ipAddr }, function (err, obj) {
                             if (err) throw err;
                             console.log(obj.insertedId)
                             res.send({ 'srcImage': srcImage, '_id': obj.insertedId });
