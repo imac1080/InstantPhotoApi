@@ -57,7 +57,7 @@ module.exports = function (app, db) {
                 db.collection('Fotos').find({ fotoid: v_base64 }).toArray(function (err, result) {
                     if (err) throw err;
                     if (result.length == 0) {
-                        db.collection('Fotos').insertOne({ fotoid: v_base64, formato: "data:" + req.files.file.mimetype + ";base64,", dateAdded: new Date(), votes: 0 }, function (err, obj) {
+                        db.collection('Fotos').insertOne({ fotoid: v_base64, formato: "data:" + req.files.file.mimetype + ";base64,", dateAdded: new Date(), votes: 0, ip: req.connection.remoteAddress }, function (err, obj) {
                             if (err) throw err;
                             console.log(obj.insertedId)
                             res.send({ 'srcImage': srcImage, '_id': obj.insertedId });
