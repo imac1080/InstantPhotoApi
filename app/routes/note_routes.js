@@ -1,8 +1,29 @@
 var ObjectID = require('mongodb').ObjectID
 
 module.exports = function (app, db) {
+    
+    function getIp(req) {
+        var ipAddr = req.headers["x-forwarded-for"];
+        if (ipAddr) {
+            var list = ipAddr.split(",");
+            ipAddr = list[list.length - 1];
+        } else {
+            ipAddr = req.connection.remoteAddress;
+        }
+        return ipAddr;
+    }
 
-
+    function deleteImgs(result) {
+        result.forEach(element => {
+            var date = new Date(new Date().toUTCString());
+            //console.log(((element.dateAdded - date) / 1000 / 60))
+            if (((element.dateAdded - date) / 1000 / 60) < -1440) {//-1440
+                db.collection('Fotos').deleteMany({ _id: element._id }, function (err, obj) {
+                    if (err) throw err;
+                });
+            }
+        });
+    }
 
 
     app.get("/buscarFotos", async (req, res) => {
@@ -11,20 +32,27 @@ module.exports = function (app, db) {
             if (err) throw err;
             console.log(result)
         });*/
-       
-
-        const projection = { _id: 1, dateAdded: 1, votes:1};
-        db.collection('Fotos').find().sort({ votes: -1 }).project(projection).toArray(function (err, result) {
-            res.send(result);
-            result.forEach(element => {
-                var date = new Date(new Date().toUTCString());
-                //console.log(((element.dateAdded - date) / 1000 / 60))
-                if (((element.dateAdded - date) / 1000 / 60) < -1440) {//-1440
-                    db.collection('Fotos').deleteMany({ _id: element._id }, function (err, obj) {
-                        if (err) throw err;
+        const projection = { _id: 1, dateAdded: 1, votes: 1 };
+        var ipAddr = await getIp(req);
+        console.log(ipAddr);
+        db.collection('Fotos').find({ ip: { $nin: [ipAddr] } }).sort({ votes: -1 }).project(projection).toArray(function (err, result) {
+            if (result[0] == null) {
+                db.collection('Fotos').find().sort({ votes: -1 }).project(projection).toArray(function (err, result) {
+                    result.forEach(element => {
+                        element["voted"] = "yes";
                     });
-                }
-            });
+                    res.send(result);
+                    //console.log(result);
+                    deleteImgs(result);
+                });
+            } else {
+                result.forEach(element => {
+                    element["voted"] = "no";
+                });
+                res.send(result);
+                //console.log(result);
+                deleteImgs(result);
+            }
         });
     });
 
@@ -37,6 +65,27 @@ module.exports = function (app, db) {
         });
     });
 
+
+    app.get("/buscarFotosAll", async (req, res) => {
+        const projection = { _id: 1, dateAdded: 1, votes: 1 };
+        var ipAddr = await getIp(req);
+        db.collection('Fotos').find({ ip: { $nin: [ipAddr] } }).sort({ votes: -1 }).project(projection).toArray(function (err, result2) {
+            db.collection('Fotos').find().sort({ votes: -1 }).project(projection).toArray(function (err, result) {
+                result.forEach(element => {
+                    result2.forEach(element2 => {
+                        if (element2["_id"].equals(element["_id"]))
+                            element["voted"] = "no";
+                    });
+                    if (element["voted"] == null)
+                        element["voted"] = "yes";
+                });
+                res.send(result);
+                //console.log(result);
+                deleteImgs(result);
+            });
+        });
+
+    });
 
     app.post("/upload", async (req, res) => {
 
@@ -107,20 +156,15 @@ module.exports = function (app, db) {
     });
 
     app.post("/vote", async (req, res) => {
-        var ipAddr = req.headers["x-forwarded-for"];
-        if (ipAddr){
-          var list = ipAddr.split(",");
-          ipAddr = list[list.length-1];
-        } else {
-          ipAddr = req.connection.remoteAddress;
-        }
+
+        var ipAddr = await getIp(req);
 
         var ObjectId = require('mongodb').ObjectId;
         var o_id = new ObjectId(req.body.id);
         if (Object.keys(req.body).length == 2 && (req.body.vote == 0 || req.body.vote == 1)) {
             if (req.body.vote == 0)
                 req.body.vote = -1;
-            db.collection('Fotos').updateOne({ _id: o_id }, { $inc: { votes: req.body.vote } , $push: { ip: ipAddr } }, function (err, obj) {
+            db.collection('Fotos').updateOne({ _id: o_id, ip: { $nin: [ipAddr] } }, { $inc: { votes: req.body.vote }, $push: { ip: ipAddr } }, function (err, obj) {
                 if (err) throw err;
                 res.send({ 'vote': 'ok' })
             });
